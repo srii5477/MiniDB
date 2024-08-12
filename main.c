@@ -25,7 +25,9 @@ typedef enum
 {
     PREP_SUCCESS,
     PREP_SYNTAX_ERROR,
-    PREP_UNRECOG_STATEMENT
+    PREP_STRING_TOO_LONG,
+    PREP_UNRECOG_STATEMENT,
+    PREP_NEG_ID
 } PrepResult;
 
 typedef enum
@@ -43,8 +45,8 @@ typedef enum
 typedef struct
 {
     uint32_t id;
-    char username[COLUMN_USERNAME_SIZE];
-    char email[COLUMN_EMAIL_SIZE];
+    char username[COLUMN_USERNAME_SIZE + 1];
+    char email[COLUMN_EMAIL_SIZE + 1];
 
 } Row;
 typedef struct statement
@@ -121,20 +123,46 @@ InputBuffer *new_input_buffer()
     return IB;
 }
 
+PrepResult prepare_insert(InputBuffer* input_buffer, Statement* statement) {
+    statement->type = STATEMENT_INSERT;
+    char* keyword = strtok(input_buffer->buffer, " ");
+    char* id = strtok(NULL, " ");
+    char* uname = strtok(NULL, " ");
+    char* mail = strtok(NULL, " ");
+    if(id == NULL || id == NULL || uname == NULL) {
+        return PREP_SYNTAX_ERROR; // no field is allowed to be null
+    }
+    int id_val = atoi(id);
+    if (id_val < 0) {
+        return PREP_NEG_ID;
+    }
+    if (strlen(uname) > COLUMN_USERNAME_SIZE) {
+        return PREP_STRING_TOO_LONG;
+    }
+    if (strlen(mail) > COLUMN_EMAIL_SIZE) {
+        return PREP_STRING_TOO_LONG;
+    }
+    statement->row_to_insert.id = id_val;
+    strcpy(statement->row_to_insert.username, uname);
+    strcpy(statement->row_to_insert.email, mail); // copying char* to char[]
+
+    return PREP_SUCCESS;
+}
 
 PrepResult prepare_statement(InputBuffer *input_buffer, Statement *statement)
 {
     if (strncmp(input_buffer->buffer, "INSERT", 6) == 0)
     { // INSERT cmd will be followed by data
-        statement->type = STATEMENT_INSERT;
-        int args_assigned = sscanf(
-            input_buffer->buffer, "insert %d %s %s", &(statement->row_to_insert.id), statement->row_to_insert.username,
-            statement->row_to_insert.email);
-        if (args_assigned < 3)
-        {
-            return PREP_SYNTAX_ERROR;
-        }
-        return PREP_SUCCESS;
+        // statement->type = STATEMENT_INSERT;
+        // int args_assigned = sscanf(
+        //     input_buffer->buffer, "insert %d %s %s", &(statement->row_to_insert.id), statement->row_to_insert.username,
+        //     statement->row_to_insert.email);
+        // if (args_assigned < 3)
+        // {
+        //     return PREP_SYNTAX_ERROR;
+        // }
+        // return PREP_SUCCESS;
+        return prepare_insert(input_buffer, statement);
     }
     if (strncmp(input_buffer->buffer, "SELECT", 6) == 0)
     {
@@ -288,8 +316,19 @@ int main(int argc, char *argv[])
         }
         case (PREP_SYNTAX_ERROR): 
         {
+            printf("Syntax error detected.\n");
+            continue;
 
-
+        }
+        case (PREP_STRING_TOO_LONG):
+        {
+            printf("Input fields are too long.\n");
+            continue;
+        }
+        case (PREP_NEG_ID):
+        {
+            printf("Id can't be negative.\n");
+            continue;
         }
         }
         switch(execute_statement(&statement, table)) {
